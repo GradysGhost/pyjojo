@@ -10,7 +10,8 @@ install_requires = [
     'pyyaml==3.10',
     'setuptools==0.6c11',
     'tornado==3.0.1',
-    'toro==0.5'
+    'toro==0.5',
+    'passlib==1.6'
 ]
 
 #
@@ -22,7 +23,7 @@ install_requires = [
 setup(
     # metadata
     name="pyjojo",
-    version="0.5",
+    version="0.6",
     author="Anthony Tarola",
     author_email="anthony.tarola@gmail.com",
     description="Expose a set of shell scripts as an API.",

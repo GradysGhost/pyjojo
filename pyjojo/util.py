@@ -7,11 +7,11 @@ import sys
 from optparse import OptionParser, IndentedHelpFormatter
 from pkg_resources import resource_filename
 
-import tornado.web
-import tornado.httpserver
+import passlib
 import tornado.web
 from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
+from tornado.netutil import bind_unix_socket
 
 from pyjojo.config import config
 from pyjojo.scripts import create_collection
@@ -62,7 +62,7 @@ def command_line_options():
     parser.description = """Expose a directory of bash scripts as an API.
 
 Note: This application gives you plenty of bullets to shoot yourself in the 
-foot!  Please use the SSH config options, give a password file, and either 
+foot!  Please use the SSL config options, give a password file, and either 
 whitelist access to it via a firewall or keep it in a private network.
 
 You can use the apache htpasswd utility to create your htpasswd files.  If
@@ -72,43 +72,35 @@ recognises."""
     parser.add_option('-d', '--debug', action="store_true", dest="debug", default=False,
                       help="Start the application in debugging mode.")
     
+    parser.add_option('--dir', action="store", dest="directory", default="/srv/pyjojo",
+                      help="Base directory to parse the scripts out of")
+    
     parser.add_option('-p', '--port', action="store", dest="port", default=3000,
                       help="Set the port to listen to on startup.")
     
     parser.add_option('-a', '--address', action ="store", dest="address", default=None,
                       help="Set the address to listen to on startup. Can be a hostname or an IPv4/v6 address.")
     
-    parser.add_option('--dir', action="store", dest="directory", default="/srv/pyjojo",
-                      help="Base directory to parse the scripts out of")
-    
     parser.add_option('-c', '--certfile', action="store", dest="certfile", default=None,
                       help="SSL Certificate File")
     
     parser.add_option('-k', '--keyfile', action="store", dest="keyfile", default=None,
                       help="SSL Private Key File")
+    
+    parser.add_option('-u', '--unix-socket', action="store", dest="unix_socket", default=None,
+                      help="Bind pyjojo to a unix domain socket")
 
     options, args = parser.parse_args()
 
     # TODO: only do this if they specify the ssl certfile and keyfile
     if len(args) >= 1:
-        config['passwords'] = parse_password_file(args[0])
+        config['passfile'] = args[0]
     else:
-        config['passwords'] = None
+        config['passfile'] = None
         
     config['directory'] = options.directory
 
     return options
-    
-
-def parse_password_file(file_name):
-    """ parse the apache password file into usernames and passwords """
-    passwords = {}
-    
-    for line in open(file_name, 'r'):
-        username, password = line.split(':')
-        passwords[username] = password.strip()
-    
-    return passwords
 
 
 def setup_logging():
@@ -120,6 +112,15 @@ def setup_logging():
     base_log.addHandler(handler)
     base_log.setLevel(logging.DEBUG)
     return handler
+
+def create_application(debug):
+    application = tornado.web.Application(
+        route.get_routes(), 
+        scripts=create_collection(config['directory']),
+        debug=debug
+    )
+    
+    return application
 
 
 def main():
@@ -136,27 +137,32 @@ def main():
 
     # setup the application
     log.info("Setting up the application")
+    application = create_application(options.debug)
     
-    application = tornado.web.Application(
-        route.get_routes(), 
-        scripts=create_collection(config['directory']),
-        debug=options.debug
-    )
-    
-    # if we're passed a certfile and keyfile, start the app as an HTTPS server, 
-    # otherwise use HTTP. 
-    if options.certfile and options.keyfile:        
+    # unix domain socket
+    if options.unix_socket:
+        log.info("Binding application to unix socket {0}".format(options.unix_socket))
+        server = HTTPServer(application)
+        socket = bind_unix_socket(options.unix_socket)
+        server.add_socket(socket)
+
+    # https server
+    elif options.certfile and options.keyfile:
+        log.info("Binding application to unix socket {0}".format(options.unix_socket))
         server = HTTPServer(application, ssl_options={
             "certfile": options.certfile,
-            "keyfile": options.keyfile
+            "keyfile": options.keyfile,
+            "ciphers": "HIGH,MEDIUM"
         })
+        server.bind(options.port, options.address)
+        server.start()
+
+    # http server
     else:
         log.warn("Application is running in HTTP mode, this is insecure.  Pass in the --certfile and --keyfile to use SSL.")
         server = HTTPServer(application)
-
-    # set the server port and fork subprocesses to run
-    server.bind(options.port, options.address)
-    server.start(1)
+        server.bind(options.port, options.address)
+        server.start()
     
     # start the ioloop
     log.info("Starting the IOLoop")

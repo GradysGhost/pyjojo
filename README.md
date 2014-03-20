@@ -41,26 +41,26 @@ You should see this as a response:
 
     Expose a directory of bash scripts as an API.
 
-    Note: This application gives you plenty of bullets to shoot yourself in the 
-    foot!  Please use the SSH config options, give a password file, and either 
+    Note: This application gives you plenty of bullets to shoot yourself in the
+    foot!  Please use the SSL config options, give a password file, and either
     whitelist access to it via a firewall or keep it in a private network.
 
-    You can use the apache htpasswd utility to create your htpasswd files.  If
-    you do, I recommend passing the -d flag, forcing the encryption type pyjojo
-    recognises.
+    You can use the apache htpasswd utility to create your htpasswd files.
 
     Options:
       -h, --help            show this help message and exit
       -d, --debug           Start the application in debugging mode.
+      --dir=DIRECTORY       Base directory to parse the scripts out of
       -p PORT, --port=PORT  Set the port to listen to on startup.
       -a ADDRESS, --address=ADDRESS
                             Set the address to listen to on startup. Can be a
                             hostname or an IPv4/v6 address.
-      --dir=DIRECTORY       Base directory to parse the scripts out of
       -c CERTFILE, --certfile=CERTFILE
                             SSL Certificate File
       -k KEYFILE, --keyfile=KEYFILE
                             SSL Private Key File
+      -u UNIX_SOCKET, --unix-socket=UNIX_SOCKET
+                            Bind pyjojo to a unix domain socket
 
 ## API
 
@@ -73,6 +73,9 @@ Example block:
     # -- jojo --
     # description: echo script
     # param: text - text to echo back
+    # param: secret1 - sensitive text you don't want logged
+    # param: secret2 - more sensitive stuff
+    # filtered_params: secret1, secret2
     # lock: false
     # -- jojo -- 
 
@@ -80,8 +83,10 @@ Fields:
 
   - **description**: information about what a script does
     - format: description: [*text*]
-  - **param**: specifies a parameter to the script, will be passed in as environment params, with the name in all caps.
+  - **param**: specifies a parameter to the script, will be passed in as environment params, with the name in all caps.  One per line.
     - format: param: *name* [- *description*]
+  - **filtered_params**: specifies a list of parameters that you have already specified, but want to ensure that the values are not logged.
+    - format: filtered_params: item1 [,item2]
   - **lock**: if true, only one instance of the script will be allowed to run
     - format: lock: True|False
     
